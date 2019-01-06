@@ -32,7 +32,7 @@ def vm():
         vm.add_args("-machine", 'usb=on')
         vm.add_args("-accel", 'kvm')
         vm.add_args("-cpu", 'host,hv_relaxed,hv_spinlocks=0x1fff,hv_time,hv_vapic,hv_vendor_id=0xDEADBEEFFF')
-        vm.add_args("-vnc", ':1')
+        vm.add_args("-vnc", '127.0.0.1:1')
         vm.add_args("-drive", r"file=/home/nelson/code/packer-windows-docker/output-qemu/packer-qemu,format=raw,if=virtio")
         logging.info("Launching VM")
         vm.launch()
@@ -43,7 +43,7 @@ def vm():
         logging.info(f"Sleeping {seconds_to_sleep} seconds for initial boot")
         time.sleep(seconds_to_sleep)
 
-        s = winrm.Session('localhost:5995', ('vagrant', 'vagrant'), read_timeout_sec=20, operation_timeout_sec=10)
+        s = winrm.Session('localhost:5995', ('vagrant', 'vagrant'), read_timeout_sec=180, operation_timeout_sec=120)
         # Poll the VM
         while True:
             try:
@@ -56,14 +56,18 @@ def vm():
                 time.sleep(10)
                 pass
         # Once command has run, wait 10 seconds.
+
         logging.debug("sharing desktop")
-        s.run_cmd('net', ['share', r'Desktop=C:\Users\vagrant\Desktop', '/grant:everyone,FULL'])
+        try:
+            s.run_cmd('net', ['share', r'Desktop=C:\Users\vagrant\Desktop', '/grant:everyone,FULL'])
+        except Exception as e:
+            pass
         logging.info("Yielding VM Fixture")
         yield vm
     logging.info("Tearing down VM Fixture")
 
 def test_install(vm):
-    s = winrm.Session('localhost:5995', ('vagrant', 'vagrant'), read_timeout_sec=20, operation_timeout_sec=10)
+    s = winrm.Session('localhost:5995', ('vagrant', 'vagrant'), read_timeout_sec=180, operation_timeout_sec=120)
 
     logging.info("uploading installer.msi")
     c = SMBConnection('vagrant', 'vagrant', 'PYTHON', 'vagrant-10', is_direct_tcp=True)
@@ -71,7 +75,12 @@ def test_install(vm):
     with open('installer/installer.msi', 'rb') as f:
         c.storeFile('Desktop', 'installer.msi', f)
     c.close()
-    logging.info("closed smb")
-    logging.info("Sleeping 600 seconds")
-    time.sleep(60*10)
-    assert True
+    logging.info("uploaded installer msi")
+    s.run_cmd('start', ['/wait', r'msiexec.exe', '/i', r'C:\Users\vagrant\Desktop\installer.msi', '/qn', '/l*v', r'C:\msi.log'])
+
+    logging.info("check if appric folder is installed")
+    c = SMBConnection('vagrant', 'vagrant', 'PYTHON', 'vagrant-10', is_direct_tcp=True)
+    c.connect('127.0.0.1', port=8445)
+    c.listPath('C$', r'Program Files (x86)\Mobivity\AppRIC')
+    c.close()
+    logging.info("AppRIC is installed!")
