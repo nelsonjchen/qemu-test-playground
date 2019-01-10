@@ -22,7 +22,7 @@ def vm():
     with qemu.QEMUMachine(
         binary='qemu-system-x86_64',
         test_dir='./test_dir',
-) as vm:
+    ) as vm:
         vm.add_args("-m", "2048")
         vm.add_args("-vga", "std")
         vm.add_args("-snapshot")

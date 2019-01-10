@@ -2,3 +2,5 @@ test_dir
 .idea/
 __pycache__
 installer/
+venv/
+__pycache__
